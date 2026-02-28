@@ -134,6 +134,11 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
+# Email-bot credentials and local state (never commit)
+credentials.yaml
+secrets.yaml
+processed_uids.json
+
 # Environments
 .env
 .envrc

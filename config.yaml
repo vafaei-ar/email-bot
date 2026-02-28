@@ -1,0 +1,17 @@
+# Copy to config.yaml and fill in your values.
+# Email filter and IMAP
+email:
+  provider: yahoo  # or gmail
+  subject_filter: "Time Sensitive: Your One-Time Code"
+  sender_filter: "asadr@pennstatehealth.psu.edu"
+  code_pattern: "\\b\\d{6}\\b"  # regex: first match is the code (e.g. 2-digit)
+  poll_interval_seconds: 60
+
+# Telegram
+telegram:
+  chat_id: -1001234567890  # numeric group chat ID (see README how to get it)
+  message_delete_after_seconds: 30  # 1 hour
+  message_template: "Code: {code}"  # optional; {code} is replaced
+
+# Path to credentials file (optional; default: credentials.yaml next to config)
+# credentials_path: ./credentials.yaml
