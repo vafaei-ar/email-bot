@@ -1,115 +1,197 @@
 # Email-to-Telegram Code Bot
 
-A Python bot that watches your Yahoo or Gmail inbox for emails matching a subject and sender, extracts a code with a regex, sends it to a Telegram group, and auto-deletes the message after a set delay.
+A Python bot that watches your Yahoo or Gmail inbox for emails matching a subject and sender, extracts a code with a regex, sends it to a Telegram chat, and auto-deletes that Telegram message after a delay.
 
-## Installation
+---
 
-### Option A: Conda (recommended)
-
-Create and activate a conda environment, then install the Python dependencies:
-
-```bash
-conda create -n ebot python=3.11 -y
-conda activate ebot
-pip install -r requirements.txt
-```
-
-From the project root, run the bot with:
-
-```bash
-conda activate ebot
-python run.py
-```
-
-### Option B: pip only
+## Quick start (recommended)
 
 From the project root:
 
 ```bash
-pip install -r requirements.txt
+chmod +x install.sh   # once
+./install.sh
 ```
 
-Then run with `python run.py` or `python -m src.main`.
+This script will:
 
-## Setup
+1. Create **`.venv`** if it does not exist and install **`requirements.txt`**
+2. Copy **`config.example.yaml` → `config.yaml`** and **`credentials.example.yaml` → `credentials.yaml`** if those files are missing
+3. Run **`scripts/bootstrap_credentials.py`**, which **prompts** for email address, email app password, and Telegram bot token when the files still contain example placeholders, and optionally asks for **`telegram.chat_id`** if it is still the example value
+4. Start the bot with **`python run.py`**
 
-### 1. Config
+- Run **`./install.sh --no-run`** to only set up the environment and files (no bot process).
+- Later runs: **`source .venv/bin/activate`** then **`python run.py`**.
 
-Copy the example config and credentials (do not commit real credentials):
+---
+
+## What you need before it works
+
+| Item | Purpose |
+|------|---------|
+| **Python 3.10+** | Runtime (3.11 works well) |
+| **App password** for Yahoo or Gmail | IMAP login — **not** your normal email password |
+| **Telegram bot token** | From [@BotFather](https://t.me/BotFather) → `/newbot` |
+| **`telegram.chat_id`** | Where to post the code (DM or group); from `getUpdates` (see below) |
+| **Filters in `config.yaml`** | Substrings for subject/sender + regex for the code |
+
+---
+
+## How it fits together
+
+```mermaid
+flowchart LR
+  subgraph mail[Your mailbox]
+    I[Inbox IMAP]
+  end
+  B[This bot]
+  T[Telegram chat]
+  I -->|poll every N seconds| B
+  B -->|send message| T
+  B -->|delete after M seconds| T
+```
+
+1. The bot connects to **IMAP** (Yahoo or Gmail).
+2. It looks at recent messages and keeps those whose **subject** and **sender** contain your configured substrings.
+3. It runs **`code_pattern`** on the body and takes the first match.
+4. It sends **`message_template`** to Telegram (with `{code}` replaced) and schedules deletion after **`message_delete_after_seconds`**.
+
+---
+
+## Configuration
+
+### Defaults (if omitted from YAML)
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| **`email.poll_interval_seconds`** | **30** | Seconds between inbox checks |
+| **`telegram.message_delete_after_seconds`** | **300** | Seconds before the Telegram message is deleted (**5 minutes**) |
+
+### `config.yaml`
+
+Copy from the example if needed:
 
 ```bash
 cp config.example.yaml config.yaml
+```
+
+Edit:
+
+- **`email.provider`**: `yahoo` or `gmail`
+- **`email.subject_filter`**: substring that must appear in the subject (case-insensitive)
+- **`email.sender_filter`**: substring that must appear in the sender (case-insensitive)
+- **`email.code_pattern`**: Python regex; first **capturing group** wins, else the full match (invalid regex → clear error at startup)
+- **`email.poll_interval_seconds`**: poll interval (default **30**)
+- **`telegram.chat_id`**: integer ID from Telegram (see below)
+- **`telegram.message_delete_after_seconds`**: delete delay (default **300** = 5 minutes)
+- **`telegram.message_template`**: e.g. `"Code: {code}"`
+
+### `credentials.yaml`
+
+```bash
 cp credentials.example.yaml credentials.yaml
 ```
 
-Edit `config.yaml`:
+Edit (this file should stay **private** and is gitignored):
 
-- **email.provider**: `yahoo` or `gmail`
-- **email.subject_filter**: substring to match in the subject (e.g. `"Time Sensitive: Your One-Time HBO Max Code"`)
-- **email.sender_filter**: substring to match in the sender address (e.g. `"hbomax@mail.hbomax.com"`)
-- **email.code_pattern**: regex to extract the code (e.g. `\b\d{2}\b` for a 2-digit code). First capture group or full match is used.
-- **email.poll_interval_seconds**: how often to check mail (e.g. `60`)
-- **telegram.chat_id**: numeric group chat ID (see below)
-- **telegram.message_delete_after_seconds**: e.g. `3600` (1 hour)
-- **telegram.message_template**: optional; use `{code}` in the message (e.g. `"Code: {code}"`)
-
-Edit `credentials.yaml` (this file is gitignored):
-
-- **email_user**: your full email (e.g. `you@gmail.com`, `you@yahoo.com`)
-- **email_password**: app password (see below)
-- **telegram_bot_token**: from [@BotFather](https://t.me/BotFather)
-
-### 2. Getting a Telegram bot token
-
-1. Open Telegram and search for **@BotFather**.
-2. Send `/newbot`, follow the prompts, and copy the token BotFather gives you.
-3. Put it in `credentials.yaml` as `telegram_bot_token`.
-
-### 3. Getting the group chat ID
-
-1. Add your bot to the Telegram group (as a member).
-2. Send any message in the group (e.g. `hello`).
-3. Open in browser: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
-4. In the JSON, find `"chat":{"id": -1001234567890}`. That number is your `chat_id` (often negative for groups).
-5. Put it in `config.yaml` as `telegram.chat_id`.
-
-Alternatively, add **@userinfobot** to the group; it will reply with the group’s chat ID.
-
-### 4. Gmail / Yahoo app password
-
-- **Gmail**: Enable 2FA, then create an [App Password](https://myaccount.google.com/apppasswords). Use that as `email_password` (no spaces).
-- **Yahoo**: Enable 2FA, then create an [app password](https://login.yahoo.com/account/security). Use that as `email_password`.
-
-Use your normal email as `email_user` and the app password as `email_password` in `credentials.yaml`.
-
-**Yahoo:** In [Yahoo Mail settings](https://login.yahoo.com/account/security), ensure IMAP access is enabled and use an app password (not your main password). If you see "socket error: EOF", the bot will retry automatically; also check firewall/VPN and try again later.
-
-## Run
-
-From the project root (so `config.yaml` and `credentials.yaml` are found):
-
-```bash
-python -m src.main
-```
-
-Or:
-
-```bash
-python run.py
-```
+- **`email_user`**: full address, e.g. `you@yahoo.com`
+- **`email_password`**: **app password** (with 2FA enabled on the account)
+- **`telegram_bot_token`**: string from BotFather
 
 Optional environment variables:
 
-- **CONFIG_PATH**: path to config file (default: `config.yaml`)
-- **CREDENTIALS_PATH**: path to credentials file (default: from config or `credentials.yaml` next to config)
+- **`CONFIG_PATH`**: path to `config.yaml` (default: `config.yaml` in the current working directory)
+- **`CREDENTIALS_PATH`**: can also be set in `config.yaml` as `credentials_path`
+
+Run from the **project root** (or set paths) so `config.yaml` resolves correctly.
+
+---
+
+## Telegram: token, `getUpdates` URL, and `chat_id`
+
+### Bot token
+
+1. Open Telegram → **@BotFather** → `/newbot` (or `/token` for an existing bot).
+2. Copy the token into **`credentials.yaml`** as **`telegram_bot_token`**.
+
+If the token is revoked or wrong, the bot logs a short message pointing you back to BotFather.
+
+### Correct `getUpdates` URL (common mistake)
+
+The API path must include the word **`bot`** **immediately before** the token:
+
+```text
+https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+```
+
+A URL **without** `bot` before the token returns **404 Not Found**.
+
+### Getting `chat_id`
+
+1. Add your bot to the **group** (or open a **private** chat with the bot).
+2. Send a message the bot can see. In **groups**, with default bot privacy, the bot may only see **commands** or **mentions** — e.g. `/start@YourBotName` or a message that `@mentions` the bot.
+3. Open **`getUpdates`** in a browser and find **`"chat":{"id": ...}`**.
+   - **Private chat**: `id` is usually a **positive** integer.
+   - **Group / supergroup**: `id` is often **negative** (e.g. `-100…`).
+4. Put that number in **`config.yaml`** as **`telegram.chat_id`**.
+
+Alternatively add **@userinfobot** to the group; it may show the group id.
+
+---
+
+## Email: app passwords (do not use your normal password)
+
+| Provider | What to do |
+|----------|------------|
+| **Gmail** | Enable 2-Step Verification → [App passwords](https://myaccount.google.com/apppasswords) → use that 16-character value as **`email_password`**. Set **`email.provider: gmail`**. |
+| **Yahoo** | Enable two-step verification → generate an **app password** in account security → use it as **`email_password`**. Enable **IMAP** for the account in mail settings. Set **`email.provider: yahoo`**. |
+
+If IMAP login fails, the bot logs a focused message: use an **app password**, correct **`email_user`**, and ensure **IMAP** is enabled — not a full stack trace for that case.
+
+---
+
+## Manual install (without `install.sh`)
+
+### Python venv + pip
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp config.example.yaml config.yaml
+cp credentials.example.yaml credentials.yaml
+# edit config.yaml and credentials.yaml, then:
+python run.py
+```
+
+### Conda
+
+If you use conda and see an error that **Terms of Service** must be accepted for `repo.anaconda.com`, either run the `conda tos accept ...` commands conda prints, or prefer **`python3 -m venv .venv`** + **`pip install -r requirements.txt`** to avoid that step.
+
+---
+
+## Troubleshooting
+
+| Symptom | What to check |
+|---------|----------------|
+| **`404`** on `getUpdates` | URL must be `.../bot<TOKEN>/getUpdates`, not `.../<TOKEN>/getUpdates`. |
+| **`result: []`** in `getUpdates` | Send a new message to the bot or group; in groups use `/start@Bot` or `@mention` if updates stay empty. |
+| **`AUTHENTICATIONFAILED` / invalid credentials** | Use an **app password**, not your normal password; correct full **email**; **IMAP** enabled (Yahoo). |
+| **Telegram: chat not found / wrong chat** | **`telegram.chat_id`** must match the **chat** you tested in `getUpdates` (group id is often negative). Bot must be **in** that group. |
+| **Invalid token** | Regenerate token in BotFather; update **`credentials.yaml`**. |
+| **YAML errors at startup** | Fix indentation/quotes in **`config.yaml`** / **`credentials.yaml`**; the error line is in the message. |
+| **Regex error at startup** | **`email.code_pattern`** must be valid Python regex. |
+| **Unknown provider** | **`email.provider`** must be **`gmail`** or **`yahoo`**. |
+
+---
 
 ## Behaviour
 
-- Polls the inbox every `poll_interval_seconds`.
-- Only considers emails whose subject contains `subject_filter` and whose sender contains `sender_filter`.
-- Extracts the first match of `code_pattern` from the email body (plain text or HTML stripped).
-- For each new matching email (by UID), sends the code to the configured Telegram group and records the UID so it is not sent again.
-- Schedules deletion of that Telegram message after `message_delete_after_seconds` (best-effort; if the process restarts, some messages may not be deleted).
+- Polls the inbox every **`poll_interval_seconds`** (default **30**).
+- Only considers emails whose subject contains **`subject_filter`** and whose sender contains **`sender_filter`**.
+- Extracts the first match of **`code_pattern`** from the body (plain text or HTML stripped).
+- For each new matching email (by IMAP UID), sends the code to Telegram and records the UID in **`processed_uids.json`** so the same message is not sent twice.
+- Schedules deletion of that Telegram message after **`message_delete_after_seconds`** (default **300**). If the process stops, scheduled deletions may be skipped.
 
 ## License
 

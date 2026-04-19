@@ -138,6 +138,7 @@ celerybeat.pid
 credentials.yaml
 secrets.yaml
 processed_uids.json
+config.yaml
 
 # Environments
 .env

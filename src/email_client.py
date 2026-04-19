@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from imap_tools import MailBox
+from imap_tools.errors import MailboxLoginError
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,8 @@ def fetch_matching_codes(
                     host, port, user, password,
                     subject_filter, sender_filter, code_pattern, limit,
                 )
+            except MailboxLoginError:
+                raise
             except (imaplib.IMAP4.abort, imaplib.IMAP4.error, OSError, ConnectionError) as e:
                 last_error = e
                 if attempt < IMAP_RETRY_ATTEMPTS:

@@ -11,7 +11,11 @@ import yaml
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        try:
+            data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in {path}: {e}") from e
+        return data or {}
 
 
 def get_config_path() -> Path:
